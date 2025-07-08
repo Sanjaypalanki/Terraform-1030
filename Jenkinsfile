@@ -2,27 +2,20 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = 'us-east-1'
-        TF_DIR = 'terraform'
-        AWS_CREDENTIALS_ID = 'aws-creds-id'      // Jenkins AWS credentials
-        SSH_KEY = 'ec2-ssh-key'                  // Jenkins SSH private key credentials
-        EC2_USER = 'ec2-user'                    // Default for Amazon Linux
-        JAR_NAME = 'myapp.jar'
+        TF_DIR = 'Day01-basicEC2_creation'
+        AWS_CREDENTIALS_ID = 'aws-creds-id'     // Jenkins credentials ID for AWS IAM user
     }
- triggers {
+
+    triggers {
         githubPush() // Auto trigger when code is pushed to GitHub (webhook needed)
     }
+
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
-                checkout scm
-            }
-        }
-
-        stage('Build Java App') {
-            steps {
-                sh 'mvn clean package'
+                git branch: 'main',
+                    url: 'https://github.com/Sanjaypalanki/Terraform-1030.git'
             }
         }
 
@@ -36,33 +29,30 @@ pipeline {
             }
         }
 
-        stage('Terraform Apply EC2') {
+        stage('Terraform Plan') {
             steps {
                 dir("${TF_DIR}") {
-                    sh 'terraform apply -auto-approve'
+                    sh 'terraform plan -out=tfplan'
                 }
             }
         }
 
-        stage('Deploy to EC2') {
+        stage('Terraform Apply') {
             steps {
-                script {
-                    def publicIp = sh(script: "terraform -chdir=${TF_DIR} output -raw public_ip", returnStdout: true).trim()
-
-                    withCredentials([sshUserPrivateKey(credentialsId: "${SSH_KEY}", keyFileVariable: 'KEYFILE')]) {
-                        sh """
-                            scp -o StrictHostKeyChecking=no -i $KEYFILE target/${JAR_NAME} ${EC2_USER}@${publicIp}:/home/${EC2_USER}/
-                            ssh -o StrictHostKeyChecking=no -i $KEYFILE ${EC2_USER}@${publicIp} 'nohup java -jar /home/${EC2_USER}/${JAR_NAME} > app.log 2>&1 &'
-                        """
-                    }
+                input message: 'Do you want to apply the Terraform plan?'
+                dir("${TF_DIR}") {
+                    sh 'terraform apply tfplan'
                 }
             }
         }
     }
 
     post {
-        always {
-            cleanWs()
+        success {
+            echo 'Terraform EC2 provisioning completed.'
+        }
+        failure {
+            echo 'Pipeline failed.'
         }
     }
 }
