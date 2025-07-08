@@ -9,7 +9,9 @@ pipeline {
         EC2_USER = 'ec2-user'                    // Default for Amazon Linux
         JAR_NAME = 'myapp.jar'
     }
-
+ triggers {
+        githubPush() // Auto trigger when code is pushed to GitHub (webhook needed)
+    }
     stages {
 
         stage('Checkout') {
